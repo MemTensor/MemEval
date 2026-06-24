@@ -2,25 +2,64 @@
 
 [中文版](./README_zh.md)
 
-MemEval is a standardized evaluation framework for memory system APIs.
-This open-source release includes the LoCoMo and LongMemEval benchmark
-pipelines while keeping the public memory adapter layer shared by MemEval.
+MemEval is a standardized evaluation framework for memory system APIs. It is
+designed to support multiple memory benchmarks through a shared evaluation
+pipeline and a common adapter layer for mainstream memory backends. Users can
+switch memory backends with `--lib` and compare mainstream memory products,
+self-hosted memory frameworks, and custom adapters under the same benchmark
+flow. The current open-source release includes LoCoMo and LongMemEval
+pipelines, with additional benchmark support planned.
 
-MemEval is not a memory service or a MemOS deployment package. MemOS is the
-memory system; MemEval is the benchmark harness used to run reproducible
-evaluations against MemOS and other memory backends through adapters.
-
-Supported benchmarks:
+Current benchmark coverage:
 
 - [LoCoMo](#locomo): long-conversation QA with multi-hop and temporal recall.
 - [LongMemEval](#longmemeval): 500 long-term memory questions across sessions.
 
 ## Pipeline
 
-Both benchmarks use the same staged pipeline:
+MemEval benchmark pipelines use the same staged flow:
 
 ```text
-Ingest -> Search -> Answer Response -> Eval -> Metric -> Report
+┌──────────────────┐
+│ Benchmark Data   │
+│ dataset-specific │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐      add()       ┌──────────────────┐
+│ 1. Ingest        ├─────────────────▶│ Memory Backend   │
+│ conversations    │                  │ selected by --lib│
+└────────┬─────────┘                  └────────┬─────────┘
+         │                                     │
+         ▼                                     │ search()
+┌──────────────────┐                           │
+│ 2. Search        │◀──────────────────────────┘
+│ retrieve context │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐      ANSWER LLM
+│ 3. Answer        ├─────────────────▶ generated answers
+│ generation       │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐      EVAL LLM / NLP
+│ 4. Evaluation    ├─────────────────▶ judged records
+│ LLM-as-Judge     │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ 5. Metrics       │
+│ accuracy/latency │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ 6. Report        │
+│ markdown/results │
+└──────────────────┘
 ```
 
 - Ingest calls the selected memory client `add()`.
@@ -123,10 +162,13 @@ Replay later stages from an existing result directory:
 ./scripts/run_lme_eval.sh --lib memos --env .env.memos --replay results/lme/{LIB}-{VERSION}/
 ```
 
-## Supported Memory Adapters
+## Supported Memory Backends
 
 The public adapter layer exposes a common `add()` / `search()` / `delete()`
-interface for these product keys:
+interface for mainstream memory products and self-hosted memory frameworks:
+
+Use `--lib` to run the same benchmark against different memory solutions
+without changing the benchmark stages, prompt flow, or metric calculation.
 
 | `--lib` | Adapter |
 |---------|---------|

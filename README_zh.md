@@ -2,25 +2,62 @@
 
 [English](./README.md)
 
-MemEval 是 memory system API 的标准化评测框架。本次开源版本只包含
-LoCoMo 和 LongMemEval 两条 benchmark 评测链路，同时保留公开的 memory
-adapter 层。
+MemEval 是 memory system API 的标准化评测框架。它通过统一评测流程和
+adapter 层支持多种 memory benchmark，并面向主流 memory backend 做横向评测。
+用户可以通过 `--lib` 切换不同 memory backend，在同一套 benchmark 流程下对比
+主流 memory 产品、自托管 memory framework 和自定义 adapter。当前开源版本包含
+LoCoMo 和 LongMemEval 两条链路，后续会继续扩展更多 benchmark 支持。
 
-MemEval 不是 memory 服务，也不是 MemOS 部署包。MemOS 是被评测的 memory
-system；MemEval 是评测框架，用统一 adapter 对 MemOS 和其他 memory backend
-运行可复现评测。
-
-支持的 benchmark：
+当前 benchmark 覆盖：
 
 - [LoCoMo](#locomo)：长对话 QA，多跳和时序记忆。
 - [LongMemEval](#longmemeval)：跨 session 长期记忆，500 个问题。
 
 ## 评测流程
 
-两条链路共享同一套阶段：
+MemEval 的 benchmark 链路共享同一套阶段：
 
 ```text
-Ingest -> Search -> Answer Response -> Eval -> Metric -> Report
+┌──────────────────┐
+│ Benchmark Data   │
+│ dataset-specific │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐      add()       ┌──────────────────┐
+│ 1. Ingest        ├─────────────────▶│ Memory Backend   │
+│ conversations    │                  │ selected by --lib│
+└────────┬─────────┘                  └────────┬─────────┘
+         │                                     │
+         ▼                                     │ search()
+┌──────────────────┐                           │
+│ 2. Search        │◀──────────────────────────┘
+│ retrieve context │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐      ANSWER LLM
+│ 3. Answer        ├─────────────────▶ generated answers
+│ generation       │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐      EVAL LLM / NLP
+│ 4. Evaluation    ├─────────────────▶ judged records
+│ LLM-as-Judge     │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ 5. Metrics       │
+│ accuracy/latency │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ 6. Report        │
+│ markdown/results │
+└──────────────────┘
 ```
 
 - Ingest 调用 memory client 的 `add()`。
@@ -121,10 +158,13 @@ conversation。可配合 `--start-idx`、`--end-idx`、`--restart-unit`、
 ./scripts/run_lme_eval.sh --lib memos --env .env.memos --replay results/lme/{LIB}-{VERSION}/
 ```
 
-## 支持的 Memory Adapter
+## 支持的 Memory Backend
 
-公开 adapter 层统一暴露 `add()` / `search()` / `delete()` 接口，支持以下
-`--lib`：
+公开 adapter 层统一暴露 `add()` / `search()` / `delete()` 接口，覆盖主流
+memory 产品和自托管 memory framework：
+
+通过 `--lib` 可以在不改 benchmark 阶段、prompt 流程和指标计算的前提下，对不同
+memory 方案运行同一套评测。
 
 | `--lib` | Adapter |
 |---------|---------|
