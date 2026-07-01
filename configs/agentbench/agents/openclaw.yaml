@@ -1,0 +1,108 @@
+# OpenClaw AgentBench config.
+#
+# This is the single OpenClaw config used by AgentBench by default:
+#   ./scripts/run_agent_eval.sh --agent openclaw --domain reasoning
+#
+# OpenClaw global defaults are read from ~/.openclaw/openclaw.json first.
+# Values in this file override or extend those defaults for AgentBench runs.
+# AgentBench also loads project .env.agent by default when it exists.
+
+agent:
+  # profile is used in result directory names.
+  profile: openclaw
+
+  # Agent runtime.
+  name: openclaw
+  command: openclaw
+
+  # OpenClaw default thinking level, written into openclaw.json as
+  # agents.defaults.thinkingDefault. OmniMemEval does not pass --thinking on
+  # the OpenClaw CLI.
+  # off|minimal|low|medium|high|xhigh|adaptive|max
+  #
+  # For benchmark stability, off/minimal/low usually avoids reasoning-only
+  # responses that can hit output length before a visible final answer.
+  thinking_level: "off"
+
+  # Optional model route. If omitted, OpenClaw uses ~/.openclaw/openclaw.json.
+  model: dashscope/qwen3.6-flash
+
+  # Optional provider overrides. These are merged with ~/.openclaw/openclaw.json.
+  # Use this when you need benchmark-specific model metadata or request params.
+  #
+  # Note: params are also synced into
+  # agents.defaults.models["<provider>/<model>"].params because that is where
+  # OpenClaw resolves runtime request params such as extra_body.
+  #
+  providers:
+    dashscope:
+      # Configure LLM_BASE_URL/LLM_API_KEY in project .env.agent or pass --env <file>.
+      # DASHSCOPE_BASE_URL/DASHSCOPE_API_KEY are also accepted as aliases.
+      baseUrl: ${LLM_BASE_URL}
+      apiKey: ${LLM_API_KEY}
+      auth: api-key
+      api: openai-completions
+      models:
+        - id: qwen3.6-flash
+          name: qwen3.6-flash
+          api: openai-completions
+          reasoning: true
+          input: [text]
+          contextWindow: 256000
+          maxTokens: 64000
+          params:
+            qwenThinkingFormat: top-level
+            extra_body:
+              enable_thinking: false
+
+  # Optional OpenClaw tool config merged into openclaw.json.
+  # tools:
+  #   profile: coding
+
+  # Optional raw openclaw.json patch merged after model/provider/tool settings.
+  # openclaw_config_patch: {}
+
+  runtime:
+    # local=true adds `openclaw agent --local`, avoiding gateway routing.
+    local: true
+
+    # isolated_copy creates a temporary OPENCLAW_HOME per task.
+    # global uses the real ~/.openclaw directly.
+    home_mode: isolated_copy
+
+    # Remove gateway/auth from temporary config. Keep true for local embedded runs.
+    strip_gateway: true
+
+    # Plain baseline should keep shared utility plugins such as Brave while
+    # disabling memory plugins that would change benchmark behavior.
+    disable_plugins: false
+    disabled_plugin_names:
+      - memos
+      - memos-local-plugin
+      - memmy-memory
+      - mem0
+      - everos
+    disabled_tool_prefixes:
+      - memos_
+      - memmy_
+      - mem0_
+      - everos_
+
+    # Link selected global ~/.openclaw paths into each temporary OPENCLAW_HOME.
+    # Useful for plugin evaluation configs.
+    # home_links:
+    #   - extensions/my-memory-plugin
+    #   - my-memory-data
+
+  # Optional env vars injected into the OpenClaw subprocess.
+  # env:
+  #   MY_PLUGIN_API_KEY: ${MY_PLUGIN_API_KEY}
+
+  # Optional prompt prefix, for plugins that use a trigger phrase.
+  # prompt_prefix:
+  #   train: "new task"
+  #   test: "new task"
+
+  session:
+    mode: gateway_compatible
+    expose_context_env: OMNIMEMEVAL_AGENT_CONTEXT

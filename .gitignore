@@ -14,7 +14,6 @@ dist/
 # Environments and credentials
 .env
 .env.*
-!.env.example
 !env_examples/.env.*
 .venv/
 venv/
@@ -30,6 +29,7 @@ downloads/
 .memos/
 mydemo/
 run_shell.sh
+LiveCodeBench/
 
 # Dataset payloads. Keep public READMEs and preparation scripts tracked.
 data/**
@@ -58,3 +58,7 @@ AGENTS.md
 docs/
 !docs/
 !docs/benchmark-results.md
+!docs/user_memory/
+!docs/user_memory/**
+!docs/agent_memory/
+!docs/agent_memory/**

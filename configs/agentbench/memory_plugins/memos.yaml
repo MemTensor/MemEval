@@ -1,0 +1,126 @@
+plugin: memos
+backup_dir: ~/memos-backups
+backup_file_template: "@backup_dir@/memos-openclaw-gateway-feedback-@domain@-@run_date@-@run_id@.tar.gz"
+settle_seconds: 1800
+feedback:
+  enabled: true
+  timeout: 300
+  memos_structured_submit: true
+  memos_submit_timeout: 900
+home_links:
+  - extensions/memos-local-plugin
+  - memos-plugin
+  - npm
+
+env:
+  OPENCLAW_HOME: "$HOME/.openclaw"
+  MEMOS_VIEWER_PORT: "18799"
+
+modes:
+  train: |
+    python - <<'PY'
+    import json
+    import os
+    from pathlib import Path
+
+    path = Path(os.environ.get("OPENCLAW_HOME", str(Path.home() / ".openclaw"))) / "openclaw.json"
+    cfg = json.loads(path.read_text(encoding="utf-8"))
+    plugins = cfg.setdefault("plugins", {})
+    plugins["enabled"] = True
+    plugins.setdefault("allow", [])
+    if "memos-local-plugin" not in plugins["allow"]:
+        plugins["allow"].insert(0, "memos-local-plugin")
+    plugins.setdefault("slots", {})["memory"] = "memos-local-plugin"
+    entry = plugins.setdefault("entries", {}).setdefault("memos-local-plugin", {})
+    entry["enabled"] = True
+    pcfg = entry.setdefault("config", {})
+    pcfg["memory_search"] = {"enabled": False}
+    pcfg["memory_add"] = {"enabled": True}
+    entry.setdefault("hooks", {})["allowConversationAccess"] = True
+    path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    PY
+  test: |
+    python - <<'PY'
+    import json
+    import os
+    from pathlib import Path
+
+    path = Path(os.environ.get("OPENCLAW_HOME", str(Path.home() / ".openclaw"))) / "openclaw.json"
+    cfg = json.loads(path.read_text(encoding="utf-8"))
+    plugins = cfg.setdefault("plugins", {})
+    plugins["enabled"] = True
+    plugins.setdefault("allow", [])
+    if "memos-local-plugin" not in plugins["allow"]:
+        plugins["allow"].insert(0, "memos-local-plugin")
+    plugins.setdefault("slots", {})["memory"] = "memos-local-plugin"
+    entry = plugins.setdefault("entries", {}).setdefault("memos-local-plugin", {})
+    entry["enabled"] = True
+    pcfg = entry.setdefault("config", {})
+    pcfg["memory_search"] = {"enabled": True}
+    pcfg["memory_add"] = {"enabled": False}
+    entry.setdefault("hooks", {})["allowConversationAccess"] = True
+    path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    PY
+
+commands:
+  clear: |
+    bash <<'BASH'
+    set -euo pipefail
+    OPENCLAW_HOME="${OPENCLAW_HOME:-$HOME/.openclaw}"
+    MEMOS_PLUGIN_HOME="$OPENCLAW_HOME/memos-plugin"
+    PLUGIN_WORKDIR="$OPENCLAW_HOME/extensions/memos-local-plugin"
+
+    pids="$(lsof -ti :18799 2>/dev/null || true)"
+    pids="$pids $(pgrep -f '[b]ridge.cts --agent=openclaw --daemon' 2>/dev/null || true)"
+    pids="$pids $(pgrep -f '[o]penclaw.*gateway' 2>/dev/null || true)"
+    for pid in $pids; do
+      [ "$pid" = "$$" ] || [ "$pid" = "$BASHPID" ] || [ "$pid" = "$PPID" ] && continue
+      [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || true
+      [ -n "$pid" ] && kill -CONT "$pid" 2>/dev/null || true
+    done
+    sleep 2
+    for pid in $pids; do
+      [ "$pid" = "$$" ] || [ "$pid" = "$BASHPID" ] || [ "$pid" = "$PPID" ] && continue
+      [ -n "$pid" ] && kill -KILL "$pid" 2>/dev/null || true
+    done
+
+    find "$OPENCLAW_HOME/agents" -type f -delete 2>/dev/null || true
+    rm -f "$OPENCLAW_HOME/memory/"*.sqlite "$OPENCLAW_HOME/memory/"*.sqlite-wal "$OPENCLAW_HOME/memory/"*.sqlite-shm 2>/dev/null || true
+    rm -f "$OPENCLAW_HOME/logs/"*.log 2>/dev/null || true
+    rm -rf "$OPENCLAW_HOME/skills/"* "$OPENCLAW_HOME/workspace/skills/"* 2>/dev/null || true
+    rm -f "$OPENCLAW_HOME/workspace/skills-lock.json" 2>/dev/null || true
+    rm -f "$MEMOS_PLUGIN_HOME/data/memos.db" "$MEMOS_PLUGIN_HOME/data/memos.db-wal" "$MEMOS_PLUGIN_HOME/data/memos.db-shm" 2>/dev/null || true
+    rm -rf "$MEMOS_PLUGIN_HOME/skills/"* 2>/dev/null || true
+    rm -f "$MEMOS_PLUGIN_HOME/logs/"*.log "$MEMOS_PLUGIN_HOME/logs/"*.jsonl "$MEMOS_PLUGIN_HOME/daemon/"* 2>/dev/null || true
+
+    if [ -d "$PLUGIN_WORKDIR" ]; then
+      mkdir -p "$OPENCLAW_HOME/logs"
+      (cd "$PLUGIN_WORKDIR" && setsid npx tsx bridge.cts --agent=openclaw --daemon > "$OPENCLAW_HOME/logs/memos-viewer.log" 2>&1 < /dev/null &)
+    fi
+    openclaw gateway start 2>/dev/null || openclaw daemon start 2>/dev/null || true
+    BASH
+  backup: |
+    bash <<'BASH'
+    set -euo pipefail
+    OPENCLAW_HOME="${OPENCLAW_HOME:-$HOME/.openclaw}"
+    db="$OPENCLAW_HOME/memos-plugin/data/memos.db"
+    if [ -f "$db" ] && command -v sqlite3 >/dev/null 2>&1; then
+      sqlite3 "$db" "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null || true
+    fi
+    pid="$(lsof -ti :18799 2>/dev/null | head -1 || true)"
+    [ -z "$pid" ] && pid="$(pgrep -f '[b]ridge.cts --agent=openclaw --daemon' 2>/dev/null | head -1 || true)"
+    if [ -n "$pid" ] && [ "$pid" != "$$" ] && [ "$pid" != "$BASHPID" ] && [ "$pid" != "$PPID" ]; then
+      kill -TERM "$pid" 2>/dev/null || true
+      sleep 2
+      kill -KILL "$pid" 2>/dev/null || true
+    fi
+    tar -czf "@backup_file@" -C "$OPENCLAW_HOME" memos-plugin
+    BASH
+  restore: |
+    bash <<'BASH'
+    set -euo pipefail
+    OPENCLAW_HOME="${OPENCLAW_HOME:-$HOME/.openclaw}"
+    rm -rf "$OPENCLAW_HOME/memos-plugin"
+    tar -xzf "@backup_file@" -C "$OPENCLAW_HOME"
+    openclaw gateway restart 2>/dev/null || openclaw gateway start 2>/dev/null || openclaw daemon start 2>/dev/null || true
+    BASH

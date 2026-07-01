@@ -4,6 +4,10 @@ This directory contains product-specific environment templates for the public
 OmniMemEval adapter layer. The open-source benchmark pipelines currently include
 LoCoMo, LongMemEval, BEAM, PersonaMem v2, and HaluMem.
 
+Agent Memory Evaluation uses a separate template, `.env.agent`, for OpenClaw,
+judge, evaluation, and embedding credentials. This keeps agent-runtime settings
+separate from User Memory backend credentials such as `.env.memos`.
+
 ## Quick Start
 
 ```bash
@@ -31,7 +35,7 @@ and LLM settings.
 
 ## Available Templates
 
-| File | Product |
+| File | Purpose |
 |------|---------|
 | `.env.memos` | MemOS |
 | `.env.mem0` | Mem0 |
@@ -48,6 +52,7 @@ and LLM settings.
 | `.env.memorylake` | MemoryLake |
 | `.env.backboard` | Backboard.io |
 | `.env.mem9` | mem9 |
+| `.env.agent` | Agent Memory Evaluation / AgentBench |
 
 Templates include only placeholders and public defaults. Do not commit real
 `.env.*` files at the repository root.

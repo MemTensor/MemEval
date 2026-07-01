@@ -1,0 +1,102 @@
+plugin: hindsight
+backup_dir: ~/memory_backup
+backup_file_template: "@backup_dir@/hindsight-openclaw-@domain@-@run_id@.tar.gz"
+settle_seconds: 1800
+feedback:
+  enabled: true
+  timeout: 300
+  memos_structured_submit: false
+home_links:
+  - npm
+
+env:
+  HINDSIGHT_API_URL: "http://127.0.0.1:9077"
+  HINDSIGHT_INSTANCE_JSON: "/var/lib/hindsight-openclaw/.pg0/instances/hindsight/instance.json"
+  PGHOST: "127.0.0.1"
+  PGPORT: "5432"
+  PGUSER: "hindsight"
+  PGDATABASE: "hindsight"
+
+commands:
+  clear: |
+    python - "$HINDSIGHT_API_URL" <<'PY'
+    import json
+    import sys
+    import urllib.parse
+    import urllib.request
+
+    base = sys.argv[1].rstrip("/")
+
+    def req(method, path):
+        request = urllib.request.Request(base + path, method=method)
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read().decode()
+        return json.loads(body) if body else {}
+
+    banks = req("GET", "/v1/default/banks").get("banks", [])
+    deleted = []
+    for bank in banks:
+        bank_id = bank.get("bank_id")
+        if not bank_id:
+            continue
+        req("DELETE", "/v1/default/banks/" + urllib.parse.quote(bank_id, safe=""))
+        deleted.append(bank_id)
+    print(json.dumps({"deleted": deleted}, ensure_ascii=False))
+    PY
+  wait_settle: |
+    python - "$HINDSIGHT_API_URL" <<'PY'
+    import json
+    import sys
+    import time
+    import urllib.parse
+    import urllib.request
+
+    base = sys.argv[1].rstrip("/")
+    busy_statuses = {"pending", "running", "queued", "processing", "in_progress"}
+    deadline = time.time() + 1800
+    time.sleep(30)
+    while time.time() < deadline:
+        with urllib.request.urlopen(base + "/v1/default/banks", timeout=30) as response:
+            banks = json.loads(response.read().decode()).get("banks", [])
+        busy = []
+        for bank in banks:
+            bank_id = bank.get("bank_id")
+            if not bank_id:
+                continue
+            path = "/v1/default/banks/" + urllib.parse.quote(bank_id, safe="") + "/operations?limit=100"
+            with urllib.request.urlopen(base + path, timeout=30) as response:
+                operations = json.loads(response.read().decode()).get("operations", [])
+            busy.extend(op for op in operations if str(op.get("status", "")).lower() in busy_statuses)
+        if not busy:
+            print(json.dumps({"busy": 0}))
+            raise SystemExit(0)
+        print(json.dumps({"busy": len(busy)}))
+        time.sleep(10)
+    print(json.dumps({"warning": "hindsight operations did not become idle before timeout"}))
+    PY
+  backup: |
+    bash <<'BASH'
+    set -euo pipefail
+    tmp_dir="$(mktemp -d)"
+    pg_dump -h "${PGHOST:-127.0.0.1}" -p "${PGPORT:-5432}" -U "${PGUSER:-hindsight}" -d "${PGDATABASE:-hindsight}" -Fc -f "$tmp_dir/hindsight.dump"
+    if [ -f "${HINDSIGHT_INSTANCE_JSON:-/var/lib/hindsight-openclaw/.pg0/instances/hindsight/instance.json}" ]; then
+      cp "${HINDSIGHT_INSTANCE_JSON:-/var/lib/hindsight-openclaw/.pg0/instances/hindsight/instance.json}" "$tmp_dir/instance.json"
+    fi
+    printf '%s\n' "@run_id@" > "$tmp_dir/run_id.txt"
+    printf '%s\n' "@domain@" > "$tmp_dir/domain.txt"
+    tar -czf "@backup_file@" -C "$tmp_dir" .
+    rm -rf "$tmp_dir"
+    BASH
+  restore: |
+    bash <<'BASH'
+    set -euo pipefail
+    tmp_dir="$(mktemp -d)"
+    tar -xzf "@backup_file@" -C "$tmp_dir"
+    test -f "$tmp_dir/hindsight.dump"
+    psql -h "${PGHOST:-127.0.0.1}" -p "${PGPORT:-5432}" -U "${PGUSER:-hindsight}" -d "${PGDATABASE:-hindsight}" \
+      -v ON_ERROR_STOP=1 \
+      -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid();" >/dev/null
+    pg_restore -h "${PGHOST:-127.0.0.1}" -p "${PGPORT:-5432}" -U "${PGUSER:-hindsight}" -d "${PGDATABASE:-hindsight}" \
+      --clean --if-exists --no-owner --exit-on-error "$tmp_dir/hindsight.dump"
+    rm -rf "$tmp_dir"
+    BASH

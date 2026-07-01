@@ -1,0 +1,128 @@
+from __future__ import annotations
+
+import json
+from argparse import Namespace
+from pathlib import Path
+
+import pytest
+
+import sys
+
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts"))
+
+from agentbench.domains import DOMAIN_REGISTRY, create_domain
+from agentbench.domains.code_implementation.livecode import _extract_code_from_text
+from agentbench.agents.openclaw import OpenClawAgentAdapter
+
+
+def test_domain_registry_includes_migrated_domains():
+    assert {
+        "code_implementation",
+        "information_retrieval",
+        "knowledge_work",
+        "reasoning",
+        "software_engineering",
+    } <= set(DOMAIN_REGISTRY)
+
+
+def test_information_retrieval_loads_tasks_and_reports_missing_task(tmp_path: Path):
+    dataset_file = tmp_path / "browsecomp.jsonl"
+    dataset_file.write_text(
+        json.dumps({"query_id": "q1", "query": "Who?", "answer": "Ada"}) + "\n"
+    )
+    split_file = tmp_path / "split.json"
+    split_file.write_text(json.dumps({"clusters": {"c": {"train": [], "test": ["q1"]}}}))
+
+    domain = create_domain(
+        "information_retrieval",
+        {"dataset_file": str(dataset_file), "split_file": str(split_file)},
+    )
+    tasks = domain.load_tasks(Namespace(split="test", task=None))
+    assert [task["name"] for task in tasks] == ["q1"]
+
+    with pytest.raises(ValueError, match="No matching information_retrieval"):
+        domain.load_tasks(Namespace(split="test", task="missing"))
+
+
+def test_information_retrieval_setup_is_mcp_only(tmp_path: Path):
+    dataset_file = tmp_path / "browsecomp.jsonl"
+    dataset_file.write_text(
+        json.dumps({"query_id": "q1", "query": "Who?", "answer": "Ada"}) + "\n"
+    )
+    split_file = tmp_path / "split.json"
+    split_file.write_text(json.dumps({"clusters": {"c": {"train": [], "test": ["q1"]}}}))
+    domain = create_domain(
+        "information_retrieval",
+        {
+            "dataset_file": str(dataset_file),
+            "split_file": str(split_file),
+            "disabled_tools": ["exec", "web_search"],
+        },
+    )
+
+    env_info = domain.setup({"name": "q1"}, "openclaw", 1)
+
+    assert env_info["mcp_only"] is True
+    assert set(env_info["mcp_servers"]) == {"bcp-search"}
+    assert env_info["disabled_tools"] == ["exec", "web_search"]
+
+
+def test_knowledge_work_loads_tasks_and_reports_missing_task(tmp_path: Path):
+    dataset_file = tmp_path / "dataset.json"
+    task_id = "12345678-aaaa-bbbb-cccc-123456789abc"
+    dataset_file.write_text(json.dumps([
+        {
+            "task_id": task_id,
+            "sector": "sector",
+            "occupation": "occupation",
+            "prompt": "Create a report.",
+            "rubric_json": [],
+        }
+    ]))
+    split_file = tmp_path / "clusters.json"
+    split_file.write_text(json.dumps({"clusters": {"c": {"train": [], "test": [task_id]}}}))
+
+    domain = create_domain(
+        "knowledge_work",
+        {"dataset_file": str(dataset_file), "split_file": str(split_file)},
+    )
+    tasks = domain.load_tasks(Namespace(split="test", task=None))
+    assert [task["name"] for task in tasks] == ["12345678"]
+
+    with pytest.raises(ValueError, match="No matching knowledge_work"):
+        domain.load_tasks(Namespace(split="test", task="missing"))
+
+
+def test_code_implementation_extracts_last_valid_python_block():
+    text = """
+First attempt:
+```python
+def broken(:
+    pass
+```
+
+Final:
+```python
+def solve():
+    print("ok")
+
+if __name__ == "__main__":
+    solve()
+```
+"""
+    assert "def solve" in _extract_code_from_text(text)
+
+
+def test_openclaw_parse_extra_marks_embedded_error():
+    class Result:
+        stdout = ""
+        stderr = (
+            '[agent/embedded] embedded run agent end: runId=x isError=true '
+            'error=The model returned incomplete tool_call arguments. rawError=details'
+        )
+
+    parsed = OpenClawAgentAdapter({})._parse_extra(Result())
+    assert parsed["completion_status"] == "error"
+    assert "incomplete tool_call" in parsed["error"]

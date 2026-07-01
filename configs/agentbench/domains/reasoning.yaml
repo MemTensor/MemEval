@@ -1,0 +1,15 @@
+# OmniMemEval AgentBench reasoning domain.
+#
+# Expected data layout:
+#   <data_dir>/train.jsonl
+#   <data_dir>/test.jsonl
+#
+# Each row should contain at least:
+#   {"_idx": 1, "problem": "...", "answer": "..."}
+
+data_dir: "./data/agentbench/Reasoning & Problem Decomposition/test_set_100"
+agent_timeout: 1800
+verify_mode: llm
+eval_model_name: ${JUDGE_MODEL}
+eval_api_base: ${JUDGE_API_BASE}
+eval_api_key: ${JUDGE_API_KEY}

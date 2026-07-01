@@ -1,0 +1,68 @@
+# BrowseComp-Plus information retrieval domain.
+
+dataset_file: ./data/agentbench/BrowseComp-Plus/browsecomp_plus_decrypted.jsonl
+split_file: ./data/agentbench/BrowseComp-Plus/task_split.json
+agent_timeout: 3000
+
+disabled_tools:
+  - read_file
+  - write_file
+  - edit_file
+  - list_dir
+  - exec
+  - web_search
+  - web_fetch
+  - message
+  - spawn
+  - cron
+
+mcp_server:
+  auto_start: true
+  startup_timeout: 300
+  port: 9100
+  searcher_type: configurable_faiss
+  index_path: ./data/agentbench/BrowseComp-Plus/indexes/openai-compatible/corpus.*.pkl
+  index_metadata: ./data/agentbench/BrowseComp-Plus/indexes/openai-compatible/metadata.json
+  metric: inner_product
+  dataset_name: Tevatron/browsecomp-plus-corpus
+  dataset_split: train
+  docid_field: docid
+  text_field: text
+  k: 5
+  snippet_max_tokens: 512
+
+embedding:
+  provider: openai_compatible
+  endpoint: ${IR_EMBEDDING_ENDPOINT}
+  model: ${IR_EMBEDDING_MODEL}
+  api_key: ${IR_EMBEDDING_API_KEY}
+  dimensions: 0
+  normalize: true
+  query_prefix: ""
+  passage_prefix: ""
+  batch_size: 64
+  max_text_chars: 120000
+  max_batch_chars: 120000
+  tokenizer_name: BAAI/bge-m3
+  max_tokens: 7800
+  max_batch_tokens: 7800
+  timeout: 30
+  max_retries: 2
+
+index_builder:
+  corpus_dataset: Tevatron/browsecomp-plus-corpus
+  corpus_split: train
+  docid_field: docid
+  text_field: text
+  output_dir: ./data/agentbench/BrowseComp-Plus/indexes/openai-compatible
+  shard_size: 50000
+  dtype: float32
+  metric: inner_product
+
+judge:
+  model: ${JUDGE_MODEL}
+  api_base: ${JUDGE_API_BASE}
+  api_key: ${JUDGE_API_KEY}
+  max_tokens: 4096
+  temperature: 0.7
+  disable_thinking: true

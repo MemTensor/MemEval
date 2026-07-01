@@ -1,0 +1,12 @@
+# LiveCodeBench code implementation domain.
+#
+# Requires the LiveCodeBench repo for its official verifier:
+#   git clone https://github.com/LiveCodeBench/LiveCodeBench.git ./LiveCodeBench
+
+lcb_repo: ./LiveCodeBench
+release_version: release_v6
+cache_dir: ./data/agentbench/livecode
+split_file: ./data/agentbench/livecode/task_split.json
+
+agent_timeout: 900
+test_timeout: 6

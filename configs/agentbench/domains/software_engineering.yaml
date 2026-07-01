@@ -1,0 +1,10 @@
+# SWE-bench Verified software engineering domain.
+#
+# Requires Docker plus Python packages: docker, pandas, pyarrow, swebench.
+
+parquet_file: ./data/agentbench/swebench/test-00000-of-00001.parquet
+tar_dir: ./data/agentbench/swebench/images
+split_file: ./data/agentbench/swebench/task_split.json
+
+agent_timeout: 1800
+verify_timeout: 1800

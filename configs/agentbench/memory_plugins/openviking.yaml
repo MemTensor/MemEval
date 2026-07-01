@@ -1,0 +1,109 @@
+plugin: openviking
+backup_dir: ~/memory_backup
+backup_file_template: "@backup_dir@/openviking-@domain@-@run_id@.tar.gz"
+settle_seconds: 1800
+feedback:
+  enabled: true
+  timeout: 300
+  memos_structured_submit: false
+home_links:
+  - extensions/openviking
+  - npm
+
+env:
+  OPENVIKING_CONFIG: "$HOME/.openviking/ov.conf"
+  OPENVIKING_DATA_DIR: "/opt/openviking/data"
+  OPENVIKING_SERVER_CMD: "/opt/openviking/venv/bin/openviking-server"
+  OPENVIKING_URL: "http://127.0.0.1:1933"
+  OPENVIKING_LOG: "$HOME/.openviking/openviking-server.log"
+
+commands:
+  validate: |
+    test -x "${OPENVIKING_SERVER_CMD:-/opt/openviking/venv/bin/openviking-server}"
+    test -f "${OPENVIKING_CONFIG:-$HOME/.openviking/ov.conf}"
+  clear: |
+    bash <<'BASH'
+    set -euo pipefail
+    OPENVIKING_DATA_DIR="${OPENVIKING_DATA_DIR:-/opt/openviking/data}"
+    OPENVIKING_CONFIG="${OPENVIKING_CONFIG:-$HOME/.openviking/ov.conf}"
+    OPENVIKING_SERVER_CMD="${OPENVIKING_SERVER_CMD:-/opt/openviking/venv/bin/openviking-server}"
+    OPENVIKING_LOG="${OPENVIKING_LOG:-$HOME/.openviking/openviking-server.log}"
+    OPENVIKING_URL="${OPENVIKING_URL:-http://127.0.0.1:1933}"
+    pid="$(cat "$OPENVIKING_DATA_DIR/.openviking.pid" 2>/dev/null || true)"
+    [ -z "$pid" ] && pid="$(pgrep -f "openviking-server.*--config[ =]$OPENVIKING_CONFIG" 2>/dev/null | head -1 || true)"
+    [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || true
+    sleep 2
+    [ -n "$pid" ] && kill -KILL "$pid" 2>/dev/null || true
+    if [ -e "$OPENVIKING_DATA_DIR" ]; then
+      mv "$OPENVIKING_DATA_DIR" "${OPENVIKING_DATA_DIR}.before-clean-$(date +%Y%m%d_%H%M%S_%N)"
+    fi
+    mkdir -p "$OPENVIKING_DATA_DIR" "$(dirname "$OPENVIKING_LOG")"
+    setsid env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u NO_PROXY -u http_proxy -u https_proxy -u all_proxy -u no_proxy \
+      "$OPENVIKING_SERVER_CMD" --config "$OPENVIKING_CONFIG" > "$OPENVIKING_LOG" 2>&1 < /dev/null &
+    for _ in $(seq 1 60); do curl -sS --max-time 2 "$OPENVIKING_URL/health" | grep -q '"healthy":true' && break; sleep 1; done
+    BASH
+  wait_settle: |
+    bash <<'BASH'
+    set -euo pipefail
+    OPENVIKING_URL="${OPENVIKING_URL:-http://127.0.0.1:1933}"
+    deadline=$((SECONDS + 1800))
+    stable_since=$SECONDS
+    while [ "$SECONDS" -lt "$deadline" ]; do
+      active="$(python - "$OPENVIKING_URL" <<'PY' || echo error
+    import json
+    import sys
+    import urllib.request
+    url = sys.argv[1].rstrip("/") + "/api/v1/tasks?limit=200"
+    terminal = {"completed", "failed", "cancelled", "canceled"}
+    with urllib.request.urlopen(url, timeout=5) as resp:
+        payload = json.load(resp)
+    tasks = payload.get("result") or []
+    print(sum(1 for item in tasks if str(item.get("status", "")).lower() not in terminal))
+    PY
+    )"
+      if [ "$active" = "0" ]; then
+        [ $((SECONDS - stable_since)) -ge 30 ] && exit 0
+      else
+        stable_since=$SECONDS
+      fi
+      sleep 5
+    done
+    BASH
+  backup: |
+    bash <<'BASH'
+    set -euo pipefail
+    OPENVIKING_DATA_DIR="${OPENVIKING_DATA_DIR:-/opt/openviking/data}"
+    parent="$(dirname "$OPENVIKING_DATA_DIR")"
+    base="$(basename "$OPENVIKING_DATA_DIR")"
+    pid="$(cat "$OPENVIKING_DATA_DIR/.openviking.pid" 2>/dev/null || true)"
+    [ -z "$pid" ] && pid="$(pgrep -f 'openviking-server' 2>/dev/null | head -1 || true)"
+    [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || true
+    sleep 2
+    rm -f "$OPENVIKING_DATA_DIR/.openviking.pid" 2>/dev/null || true
+    tar -czf "@backup_file@" -C "$parent" "$base"
+    BASH
+  restore: |
+    bash <<'BASH'
+    set -euo pipefail
+    OPENVIKING_DATA_DIR="${OPENVIKING_DATA_DIR:-/opt/openviking/data}"
+    OPENVIKING_CONFIG="${OPENVIKING_CONFIG:-$HOME/.openviking/ov.conf}"
+    OPENVIKING_SERVER_CMD="${OPENVIKING_SERVER_CMD:-/opt/openviking/venv/bin/openviking-server}"
+    OPENVIKING_LOG="${OPENVIKING_LOG:-$HOME/.openviking/openviking-server.log}"
+    OPENVIKING_URL="${OPENVIKING_URL:-http://127.0.0.1:1933}"
+    parent="$(dirname "$OPENVIKING_DATA_DIR")"
+    base="$(basename "$OPENVIKING_DATA_DIR")"
+    tar -tzf "@backup_file@" | grep -q "^${base}/"
+    pid="$(cat "$OPENVIKING_DATA_DIR/.openviking.pid" 2>/dev/null || true)"
+    [ -z "$pid" ] && pid="$(pgrep -f "openviking-server.*--config[ =]$OPENVIKING_CONFIG" 2>/dev/null | head -1 || true)"
+    [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || true
+    sleep 2
+    if [ -e "$OPENVIKING_DATA_DIR" ]; then
+      mv "$OPENVIKING_DATA_DIR" "${OPENVIKING_DATA_DIR}.before-restore-$(date +%Y%m%d_%H%M%S_%N)"
+    fi
+    tar -xzf "@backup_file@" -C "$parent"
+    rm -f "$OPENVIKING_DATA_DIR/.openviking.pid" 2>/dev/null || true
+    mkdir -p "$(dirname "$OPENVIKING_LOG")"
+    setsid env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u NO_PROXY -u http_proxy -u https_proxy -u all_proxy -u no_proxy \
+      "$OPENVIKING_SERVER_CMD" --config "$OPENVIKING_CONFIG" > "$OPENVIKING_LOG" 2>&1 < /dev/null &
+    for _ in $(seq 1 60); do curl -sS --max-time 2 "$OPENVIKING_URL/health" | grep -q '"healthy":true' && break; sleep 1; done
+    BASH

@@ -8,6 +8,9 @@ rich
 openai
 tiktoken
 pydantic
+PyYAML
+fastmcp
+faiss-cpu
 
 # ─── Dataset Preparation ─────────────────────────────────────────────────────
 datasets
@@ -23,6 +26,16 @@ transformers
 
 # ─── Excel Export ─────────────────────────────────────────────────────────────
 openpyxl
+python-docx
+pdf2image
+pillow
+pdfplumber
+PyMuPDF
+
+# ─── Optional: AgentBench SWE-bench domain ───────────────────────────────────
+docker
+pyarrow
+swebench
 
 # ─── Optional: Third-party Memory Service SDKs ──────────────────────────────
 # Most clients use REST (requests) and need no extra package.

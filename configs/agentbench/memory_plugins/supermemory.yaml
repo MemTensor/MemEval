@@ -1,0 +1,63 @@
+plugin: supermemory
+backup_dir: ~/memory_backup
+backup_file_template: "@backup_dir@/supermemory-openclaw-@domain@-@run_date@-@run_id@.tar.gz"
+settle_seconds: 1800
+feedback:
+  enabled: true
+  timeout: 300
+  memos_structured_submit: false
+home_links:
+  - npm
+
+env:
+  OPENCLAW_CONFIG: "$HOME/.openclaw/openclaw.json"
+  OPENCLAW_HOME: "$HOME/.openclaw"
+  SUPERMEMORY_PLUGIN_NAME: "openclaw-supermemory"
+  SUPERMEMORY_BATCH_SIZE: "50"
+  NODE_PATH: "$HOME/.openclaw/npm/node_modules"
+
+commands:
+  validate: |
+    node "@project_dir@/scripts/agentbench/plugin_lifecycle/supermemory_node.js" configure
+    node "@project_dir@/scripts/agentbench/plugin_lifecycle/supermemory_node.js" count
+  set_mode_train: |
+    node "@project_dir@/scripts/agentbench/plugin_lifecycle/supermemory_node.js" mode train
+  set_mode_test: |
+    node "@project_dir@/scripts/agentbench/plugin_lifecycle/supermemory_node.js" mode test
+  clear: |
+    node "@project_dir@/scripts/agentbench/plugin_lifecycle/supermemory_node.js" wipe
+  backup: |
+    bash <<'BASH'
+    set -euo pipefail
+    tmp_dir="$(mktemp -d)"
+    jsonl="$tmp_dir/supermemory-documents.jsonl"
+    manifest="$tmp_dir/manifest.json"
+    node "@project_dir@/scripts/agentbench/plugin_lifecycle/supermemory_node.js" export "$jsonl"
+    python - "$manifest" "$jsonl" <<'PY'
+    import json
+    import sys
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    manifest, jsonl = sys.argv[1:]
+    count = sum(1 for line in Path(jsonl).read_text(encoding="utf-8").splitlines() if line.strip())
+    Path(manifest).write_text(json.dumps({
+        "plugin": "openclaw-supermemory",
+        "domain": "@domain@",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "document_count": count,
+        "documents_file": "supermemory-documents.jsonl",
+    }, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    PY
+    tar -czf "@backup_file@" -C "$tmp_dir" manifest.json supermemory-documents.jsonl
+    rm -rf "$tmp_dir"
+    BASH
+  restore: |
+    bash <<'BASH'
+    set -euo pipefail
+    tmp_dir="$(mktemp -d)"
+    tar -xzf "@backup_file@" -C "$tmp_dir"
+    test -f "$tmp_dir/supermemory-documents.jsonl"
+    node "@project_dir@/scripts/agentbench/plugin_lifecycle/supermemory_node.js" import "$tmp_dir/supermemory-documents.jsonl" replace
+    rm -rf "$tmp_dir"
+    BASH

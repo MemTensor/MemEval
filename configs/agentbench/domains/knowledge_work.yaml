@@ -1,0 +1,16 @@
+# GDPVal knowledge work domain.
+
+dataset_file: ./data/agentbench/gdpval/dataset.json
+split_file: ./data/agentbench/gdpval/clusters.json
+reference_dir: ./data/agentbench/gdpval/reference_files
+meta_prompts_dir: ./data/agentbench/gdpval/meta_prompts
+
+agent_timeout: 1800
+
+eval_api_base: ${EVALUATION_API_BASE}
+eval_api_key: ${EVALUATION_API_KEY}
+eval_model_owner: ${EVALUATION_MODEL_OWNER}
+eval_model_name: ${EVALUATION_MODEL_NAME}
+eval_timeout: ${EVALUATION_TIMEOUT}
+eval_max_retries: ${EVALUATION_MAX_RETRIES}
+pass_threshold: 0.6
