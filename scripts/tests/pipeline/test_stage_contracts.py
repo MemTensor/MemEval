@@ -12,9 +12,15 @@ sys.path.insert(0, SCRIPTS_DIR)
 sys.path.insert(0, os.path.join(SCRIPTS_DIR, "locomo"))
 
 import locomo_metric  # noqa: E402
+from beam import beam_metric  # noqa: E402
+from beam.beam_report import BEAMReport  # noqa: E402
+from halumem import hm_metric  # noqa: E402
+from halumem.hm_report import HaluMemReport  # noqa: E402
 from locomo.locomo_report import LoCoMoReport  # noqa: E402
 from longmemeval import lme_metric  # noqa: E402
 from longmemeval.lme_report import LMEReport  # noqa: E402
+from personamem_v2 import pm_metric  # noqa: E402
+from personamem_v2.pm_report import PersonaMemReport  # noqa: E402
 from utils.duration_stats import add_duration_values, update_unit_duration_list  # noqa: E402
 from utils.report_base import avg_prompt_tokens, render_token_usage  # noqa: E402
 
@@ -74,6 +80,121 @@ class TestMetricStageContracts(unittest.TestCase):
 
         self.assertEqual(results["category_scores"]["temporal"]["total"], 1)
         self.assertEqual(results["metrics"]["llm_judge_score"], 1.0)
+
+    def test_halumem_metric_counts_only_success_records(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            grade_path = os.path.join(tmpdir, "lib_hm_grades.json")
+            excel_path = os.path.join(tmpdir, "lib_hm_results.xlsx")
+            hm_metric.calculate_scores(
+                {
+                    "k1": {
+                        "user_id": "u1",
+                        "category": "Basic Fact Recall",
+                        "difficulty": "easy",
+                        "llm_judgments": {"judgment_1": True},
+                        "nlp_metrics": {"lexical": {"f1": 1.0}, "context_tokens": 7},
+                        "search_duration_ms": 15,
+                        "status": "success",
+                    },
+                    "k2": {
+                        "user_id": "u1",
+                        "category": "Basic Fact Recall",
+                        "difficulty": "easy",
+                        "llm_judgments": {"judgment_1": False},
+                        "status": "skipped",
+                    },
+                },
+                grade_path,
+                excel_path,
+            )
+            results = _read_json(grade_path)
+
+        self.assertEqual(results["category_scores"]["Basic Fact Recall"]["total"], 1)
+        self.assertEqual(results["metrics"]["llm_judge_score"], 1.0)
+
+    def test_beam_metric_counts_only_success_records(self):
+        results = beam_metric.calculate_scores({
+            "beam_exp_user_v1_1": [
+                {
+                    "nugget_score": 1.0,
+                    "scale": "100k",
+                    "dimension": "fact_recall",
+                    "difficulty": "easy",
+                    "search_duration_ms": 9,
+                    "status": "success",
+                },
+                {
+                    "nugget_score": 0.0,
+                    "scale": "100k",
+                    "dimension": "fact_recall",
+                    "difficulty": "easy",
+                    "status": "skipped",
+                },
+            ]
+        })
+
+        self.assertEqual(results["overall"]["total_questions"], 1)
+        self.assertEqual(results["overall"]["nugget_score_mean"], 1.0)
+
+    def test_personamem_metric_counts_only_success_records(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            grade_path = os.path.join(tmpdir, "lib_pm_grades.json")
+            excel_path = os.path.join(tmpdir, "lib_pm_results.xlsx")
+            pm_metric.calculate_scores(
+                {
+                    "u1": {
+                        "category": "preference",
+                        "question": "q1",
+                        "results": [
+                            {"is_correct": True, "response_duration_ms": 5},
+                            {"is_correct": False, "response_duration_ms": 5},
+                        ],
+                        "golden_answer": "(a)",
+                        "search_duration_ms": 3,
+                        "status": "success",
+                    },
+                    "u2": {
+                        "category": "preference",
+                        "question": "q2",
+                        "results": [{"is_correct": True, "response_duration_ms": 5}],
+                        "status": "skipped",
+                    },
+                },
+                grade_path,
+                excel_path,
+            )
+            results = _read_json(grade_path)
+
+        self.assertEqual(results["metrics"]["total_questions"], 1)
+        self.assertEqual(results["metrics"]["total_runs"], 2)
+        self.assertEqual(results["metrics"]["accuracy"], 0.5)
+
+    def test_personamem_metric_rejects_mixed_success_run_counts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            grade_path = os.path.join(tmpdir, "lib_pm_grades.json")
+            excel_path = os.path.join(tmpdir, "lib_pm_results.xlsx")
+            with self.assertRaisesRegex(ValueError, "Inconsistent PersonaMem run count"):
+                pm_metric.calculate_scores(
+                    {
+                        "u1": {
+                            "category": "preference",
+                            "question": "q1",
+                            "results": [
+                                {"is_correct": True, "response_duration_ms": 5},
+                                {"is_correct": False, "response_duration_ms": 5},
+                            ],
+                            "status": "success",
+                        },
+                        "u2": {
+                            "category": "preference",
+                            "question": "q2",
+                            "results": [{"is_correct": True, "response_duration_ms": 5}],
+                            "status": "success",
+                        },
+                    },
+                    grade_path,
+                    excel_path,
+                )
 
     def test_add_duration_values_prefer_per_unit_stats(self):
         stats = {
@@ -189,6 +310,75 @@ class TestReportStageContracts(unittest.TestCase):
             },
         )
         self.assertNotIn("| Context Tokens (avg) | 8 |", rendered)
+
+    def test_halumem_report_renders_minimal_metric_output(self):
+        rendered = self._render_report(
+            HaluMemReport(),
+            "lib_hm_grades.json",
+            {
+                "metrics": {
+                    "llm_judge_score": 1.0,
+                    "llm_judge_std": 0.0,
+                    "context_tokens": 7,
+                    "duration": {"search_duration_ms": 10.0},
+                },
+                "category_scores": {
+                    "Basic Fact Recall": {
+                        "category_name": "Basic Fact Recall",
+                        "llm_judge_score": 1.0,
+                        "total": 1,
+                    }
+                },
+                "difficulty_scores": {
+                    "easy": {"difficulty_name": "easy", "llm_judge_score": 1.0, "total": 1}
+                },
+            },
+        )
+        self.assertIn("By Question Type", rendered)
+
+    def test_beam_report_renders_minimal_metric_output(self):
+        rendered = self._render_report(
+            BEAMReport(),
+            "lib_beam_grades.json",
+            {
+                "overall": {
+                    "nugget_score_mean": 1.0,
+                    "nugget_score_std": 0.0,
+                    "total_questions": 1,
+                    "duration": {"search_duration_ms": 10.0},
+                },
+                "per_scale": {
+                    "100k": {"nugget_score_mean": 1.0, "nugget_score_std": 0.0, "count": 1}
+                },
+                "per_dimension": {},
+                "per_difficulty": {},
+            },
+        )
+        self.assertIn("Nugget Score", rendered)
+
+    def test_personamem_report_renders_minimal_metric_output(self):
+        rendered = self._render_report(
+            PersonaMemReport(),
+            "lib_pm_grades.json",
+            {
+                "metrics": {
+                    "accuracy": 0.5,
+                    "accuracy_std": 0.5,
+                    "total_questions": 1,
+                    "total_runs": 2,
+                    "add_duration": {"mean": 1.0, "p50": 1.0, "p95": 1.0},
+                    "search_duration": {"mean": 2.0, "p50": 2.0, "p95": 2.0},
+                },
+                "category_scores": {
+                    "preference": {
+                        "accuracy": 0.5,
+                        "accuracy_std": 0.5,
+                        "total_questions": 1,
+                    }
+                },
+            },
+        )
+        self.assertIn("Precision", rendered)
 
 
 if __name__ == "__main__":

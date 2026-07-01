@@ -7,13 +7,26 @@ designed to support multiple memory benchmarks through a shared evaluation
 pipeline and a common adapter layer for mainstream memory backends. Users can
 switch memory backends with `--lib` and compare mainstream memory products,
 self-hosted memory frameworks, and custom adapters under the same benchmark
-flow. The current open-source release includes LoCoMo and LongMemEval
-pipelines, with additional benchmark support planned.
+flow. The adapter layer covers 14 mainstream memory solutions through 15
+adapter entries, including MemOS, Mem0, Zep/Graphiti, Supermemory, EverOS,
+Letta, Hindsight, Cognee, Viking Memory, Memori, MemMachine, MemoryLake,
+Backboard.io, and mem9. This project supports five benchmark tasks: LoCoMo,
+LongMemEval, BEAM, PersonaMem v2, and HaluMem. These tasks cover complementary
+long-term memory capabilities, including conversation recall, cross-session
+updates, large-scale retrieval, personalization, and robustness under
+hallucination, conflict, and dynamic-update scenarios.
 
-Current benchmark coverage:
+Benchmark coverage:
 
-- [LoCoMo](#locomo): long-conversation QA with multi-hop and temporal recall.
-- [LongMemEval](#longmemeval): 500 long-term memory questions across sessions.
+- [LoCoMo](#locomo): long-conversation QA for multi-hop recall, temporal
+  reasoning, and open-domain memory use.
+- [LongMemEval](#longmemeval): cross-session long-term memory with knowledge
+  updates, temporal reasoning, and preference questions.
+- [BEAM](#beam): large-scale memory retrieval from 128K to 10M token contexts.
+- [PersonaMem v2](#personamem-v2): personalized memory evaluation focused on
+  preferences, sensitive information, and user-specific behavior.
+- [HaluMem](#halumem): robustness evaluation for memory hallucination, boundary
+  detection, conflicts, multi-hop inference, and dynamic updates.
 
 ## Pipeline
 
@@ -107,17 +120,29 @@ python data/locomo/prepare_locomo.py
 
 # LongMemEval S
 python data/longmemeval/prepare_longmemeval.py
+
+# BEAM 100K
+python data/beam/prepare_beam.py
+
+# PersonaMem v2
+python data/personamem_v2/prepare_personamem.py
+
+# HaluMem Medium
+python data/halumem/prepare_halumem.py
 ```
 
 Benchmark data is downloaded on demand and is not committed to this repository.
-LoCoMo is licensed under CC BY-NC 4.0, and LongMemEval is MIT-licensed; see
-[THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) and the dataset README files.
+See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) and the dataset README
+files for upstream dataset licenses and redistribution notes.
 
 ### 4. Run Evaluations
 
 ```bash
 ./scripts/run_locomo_eval.sh --lib memos --env .env.memos
 ./scripts/run_lme_eval.sh --lib memos --env .env.memos
+./scripts/run_beam_eval.sh --lib memos --env .env.memos
+./scripts/run_pmv2_eval.sh --lib memos --env .env.memos
+./scripts/run_halumem_eval.sh --lib memos --env .env.memos
 ```
 
 Useful shared options:
@@ -134,15 +159,20 @@ Useful shared options:
 | `--skip-failed-answer 1` | Mark failed answer items as skipped instead of failing the step. |
 | `--skip-failed-judge 1` | Mark failed judge items as skipped instead of failing the step. |
 
-LongMemEval also supports per-conversation streaming:
+Streaming mode is available for LongMemEval, BEAM, PersonaMem v2, and
+HaluMem. In streaming mode, OmniMemEval runs add, search, save, and delete for
+each benchmark unit before moving to the next unit. Use `--streaming 1` on the
+corresponding runner:
 
 ```bash
 ./scripts/run_lme_eval.sh --lib memos --env .env.memos --streaming 1
+./scripts/run_beam_eval.sh --lib memos --env .env.memos --streaming 1
+./scripts/run_pmv2_eval.sh --lib memos --env .env.memos --streaming 1
+./scripts/run_halumem_eval.sh --lib memos --env .env.memos --streaming 1
 ```
 
-Streaming performs add, search, save, and delete for each conversation before
-moving to the next one. It supports `--start-idx`, `--end-idx`,
-`--restart-unit`, `--no-resume`, and `--skip-failed-streaming`.
+Streaming runs support `--start-idx`, `--end-idx`, `--restart-unit`,
+`--no-resume`, and `--skip-failed-streaming`.
 
 Minimal smoke commands:
 
@@ -153,6 +183,15 @@ Minimal smoke commands:
 # LongMemEval: run one streaming conversation through search only
 ./scripts/run_lme_eval.sh --lib memos --env .env.memos --version smoke_lme \
   --streaming 1 --start-idx 0 --end-idx 0 --to-step 2
+
+# BEAM: run ingestion and search only on the default 100K scale
+./scripts/run_beam_eval.sh --lib memos --env .env.memos --version smoke_beam --to-step 2
+
+# PersonaMem v2: run ingestion and search only
+./scripts/run_pmv2_eval.sh --lib memos --env .env.memos --version smoke_pmv2 --to-step 2
+
+# HaluMem: run ingestion and search only
+./scripts/run_halumem_eval.sh --lib memos --env .env.memos --version smoke_hm --to-step 2
 ```
 
 Replay later stages from an existing result directory:
@@ -160,15 +199,18 @@ Replay later stages from an existing result directory:
 ```bash
 ./scripts/run_locomo_eval.sh --lib memos --env .env.memos --replay results/locomo/{LIB}-{VERSION}/
 ./scripts/run_lme_eval.sh --lib memos --env .env.memos --replay results/lme/{LIB}-{VERSION}/
+./scripts/run_beam_eval.sh --lib memos --env .env.memos --replay results/beam/{LIB}-{VERSION}/
+./scripts/run_pmv2_eval.sh --lib memos --env .env.memos --replay results/pmv2/{LIB}-{VERSION}/
+./scripts/run_halumem_eval.sh --lib memos --env .env.memos --replay results/halumem/{LIB}-{VERSION}/
 ```
 
 ## Benchmark Results
 
 See [docs/benchmark-results.md](./docs/benchmark-results.md) for the public
-LoCoMo and LongMemEval result snapshot reproduced under OmniMemEval's shared
-evaluation setup. The document includes reproduced scores, context-token
-metrics, deployment notes, published reference scores, and reproduction
-commands.
+result snapshot reproduced under OmniMemEval's shared evaluation setup. The
+document includes reproduced scores, context-token metrics, deployment notes,
+published reference scores, and reproduction commands for the currently public
+benchmark pipelines.
 
 ## Supported Memory Backends
 
@@ -236,36 +278,103 @@ Replay later stages:
 ./scripts/run_lme_eval.sh --lib memos --env .env.memos --replay results/lme/{LIB}-{VERSION}/
 ```
 
+<a id="beam"></a>
+### BEAM
+
+BEAM evaluates long-term memory at 128K, 500K, 1M, and 10M token scales with
+per-nugget LLM-as-Judge scoring. Data and license notes live in
+[data/beam/README.md](./data/beam/README.md).
+
+```bash
+./scripts/run_beam_eval.sh --lib memos --env .env.memos
+```
+
+Results: `results/beam/{LIB}-{VERSION}/`
+
+Replay later stages:
+
+```bash
+./scripts/run_beam_eval.sh --lib memos --env .env.memos --replay results/beam/{LIB}-{VERSION}/
+```
+
+<a id="personamem-v2"></a>
+### PersonaMem v2
+
+PersonaMem v2 evaluates personalized memory and preference-aware multiple-choice
+QA. Data and license notes live in
+[data/personamem_v2/README.md](./data/personamem_v2/README.md).
+
+```bash
+./scripts/run_pmv2_eval.sh --lib memos --env .env.memos
+```
+
+Results: `results/pmv2/{LIB}-{VERSION}/`
+
+Replay later stages:
+
+```bash
+./scripts/run_pmv2_eval.sh --lib memos --env .env.memos --replay results/pmv2/{LIB}-{VERSION}/
+```
+
+<a id="halumem"></a>
+### HaluMem
+
+HaluMem evaluates memory hallucination, conflict handling, dynamic updates, and
+memory-boundary robustness. Data and license notes live in
+[data/halumem/README.md](./data/halumem/README.md).
+
+```bash
+./scripts/run_halumem_eval.sh --lib memos --env .env.memos
+```
+
+Results: `results/halumem/{LIB}-{VERSION}/`
+
+Replay later stages:
+
+```bash
+./scripts/run_halumem_eval.sh --lib memos --env .env.memos --replay results/halumem/{LIB}-{VERSION}/
+```
+
 ## Cleanup
 
 To delete backend memory created by a run:
 
 ```bash
-./scripts/run_memory_clear.sh --lib memos --env .env.memos --version <name> --datasets locomo,lme --dry-run
-./scripts/run_memory_clear.sh --lib memos --env .env.memos --version <name> --datasets locomo,lme --yes
+./scripts/run_memory_clear.sh --lib memos --env .env.memos --version <name> --datasets locomo,lme,beam,pmv2,hm --dry-run
+./scripts/run_memory_clear.sh --lib memos --env .env.memos --version <name> --datasets locomo,lme,beam,pmv2,hm --yes
 ```
 
 `--dry-run` prints target ids without deleting data. Destructive deletion
-requires `--yes`.
+requires `--yes`. Use repeatable `--beam-scale` and `--halumem-variant` when
+clearing non-default BEAM or HaluMem datasets.
 
 ## Project Layout
 
 ```text
 OmniMemEval/
 ├── data/
+│   ├── beam/
+│   ├── halumem/
 │   ├── locomo/
-│   └── longmemeval/
+│   ├── longmemeval/
+│   └── personamem_v2/
 ├── docs/
 │   └── benchmark-results.md
 ├── env_examples/
 ├── scripts/
 │   ├── client_factory/
+│   ├── beam/
+│   ├── halumem/
 │   ├── locomo/
 │   ├── longmemeval/
+│   ├── personamem_v2/
 │   ├── tests/
 │   ├── utils/
+│   ├── run_beam_eval.sh
+│   ├── run_halumem_eval.sh
 │   ├── run_locomo_eval.sh
 │   ├── run_lme_eval.sh
+│   ├── run_pmv2_eval.sh
 │   └── run_memory_clear.sh
 ├── README.md
 ├── README_zh.md
@@ -276,8 +385,8 @@ OmniMemEval/
 ## Verification
 
 ```bash
-bash -n scripts/_experiment_utils.sh scripts/run_locomo_eval.sh scripts/run_lme_eval.sh scripts/run_memory_clear.sh
-conda run -n omnimemeval python -m compileall -q scripts
+bash -n scripts/_experiment_utils.sh scripts/run_*_eval.sh scripts/run_memory_clear.sh
+conda run -n omnimemeval python -m compileall -q scripts data
 conda run -n omnimemeval python -m unittest discover -s scripts/tests -p 'test_*.py'
 ```
 

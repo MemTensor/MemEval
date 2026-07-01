@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 
 _LOCOMO_FMT = "%I:%M %p on %d %B, %Y"
 _LME_FMT = "%Y/%m/%d (%a) %H:%M"
+_BEAM_FMTS = ("%B-%d-%Y", "%b-%d-%Y")
+_HALUMEM_FMT = "%b %d, %Y, %H:%M:%S"
 
 
 def parse_locomo_time(raw: str) -> datetime:
@@ -27,6 +29,26 @@ def parse_lme_time(raw: str) -> datetime:
     if not raw.endswith(" UTC"):
         raw += " UTC"
     return datetime.strptime(raw, f"{_LME_FMT} UTC").replace(tzinfo=timezone.utc)
+
+
+def parse_beam_time(raw: str) -> datetime:
+    """``'March-15-2024'`` or ``'Mar-15-2024'``."""
+    raw = raw.strip()
+    for fmt in _BEAM_FMTS:
+        try:
+            return datetime.strptime(raw, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+
+def parse_halumem_time(raw: str) -> datetime:
+    """``'Sep 04, 2025, 18:42:18'``."""
+    raw = raw.strip()
+    try:
+        return datetime.strptime(raw, _HALUMEM_FMT).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return datetime.now(timezone.utc)
 
 
 # ── Converters (datetime → target format) ────────────────────────────────────

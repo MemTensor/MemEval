@@ -40,6 +40,16 @@ data/**
 !data/longmemeval/
 !data/longmemeval/README.md
 !data/longmemeval/prepare_longmemeval.py
+!data/beam/
+!data/beam/README.md
+!data/beam/prepare_beam.py
+!data/halumem/
+!data/halumem/README.md
+!data/halumem/prepare_halumem.py
+!data/personamem_v2/
+!data/personamem_v2/README.md
+!data/personamem_v2/column_descriptions.md
+!data/personamem_v2/prepare_personamem.py
 
 # Not part of the public release
 WORK_LOG*.md

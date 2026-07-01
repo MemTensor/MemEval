@@ -5,13 +5,21 @@
 OmniMemEval 是 memory system API 的标准化评测框架。它通过统一评测流程和
 adapter 层支持多种 memory benchmark，并面向主流 memory backend 做横向评测。
 用户可以通过 `--lib` 切换不同 memory backend，在同一套 benchmark 流程下对比
-主流 memory 产品、自托管 memory framework 和自定义 adapter。当前开源版本包含
-LoCoMo 和 LongMemEval 两条链路，后续会继续扩展更多 benchmark 支持。
+主流 memory 产品、自托管 memory framework 和自定义 adapter。adapter 层通过
+15 个入口覆盖 14 种主流 memory 方案，包括 MemOS、Mem0、Zep/Graphiti、
+Supermemory、EverOS、Letta、Hindsight、Cognee、Viking Memory、Memori、
+MemMachine、MemoryLake、Backboard.io 和 mem9。本项目支持 LoCoMo、
+LongMemEval、BEAM、PersonaMem v2 和 HaluMem 5 个评测任务，覆盖长期记忆系统
+中几类关键能力：对话记忆、跨 session 更新、超长上下文检索、个性化偏好，以及在
+幻觉、冲突和动态更新场景下的鲁棒性。
 
-当前 benchmark 覆盖：
+Benchmark 覆盖：
 
-- [LoCoMo](#locomo)：长对话 QA，多跳和时序记忆。
-- [LongMemEval](#longmemeval)：跨 session 长期记忆，500 个问题。
+- [LoCoMo](#locomo)：长对话 QA，覆盖多跳召回、时序推理和开放域记忆使用。
+- [LongMemEval](#longmemeval)：跨 session 长期记忆，覆盖知识更新、时序推理和偏好问题。
+- [BEAM](#beam)：128K 到 10M token 上下文规模下的大规模记忆检索评测。
+- [PersonaMem v2](#personamem-v2)：面向用户偏好、敏感信息和个性化行为的记忆评测。
+- [HaluMem](#halumem)：面向记忆幻觉、边界识别、冲突处理、多跳推理和动态更新的鲁棒性评测。
 
 ## 评测流程
 
@@ -103,10 +111,18 @@ python data/locomo/prepare_locomo.py
 
 # LongMemEval S
 python data/longmemeval/prepare_longmemeval.py
+
+# BEAM 100K
+python data/beam/prepare_beam.py
+
+# PersonaMem v2
+python data/personamem_v2/prepare_personamem.py
+
+# HaluMem Medium
+python data/halumem/prepare_halumem.py
 ```
 
-Benchmark 数据按需下载，不提交到仓库。LoCoMo 使用 CC BY-NC 4.0 许可证，
-LongMemEval 使用 MIT 许可证；详见
+Benchmark 数据按需下载，不提交到仓库。上游数据许可证和再分发说明见
 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) 和各数据目录 README。
 
 ### 4. 运行评测
@@ -114,6 +130,9 @@ LongMemEval 使用 MIT 许可证；详见
 ```bash
 ./scripts/run_locomo_eval.sh --lib memos --env .env.memos
 ./scripts/run_lme_eval.sh --lib memos --env .env.memos
+./scripts/run_beam_eval.sh --lib memos --env .env.memos
+./scripts/run_pmv2_eval.sh --lib memos --env .env.memos
+./scripts/run_halumem_eval.sh --lib memos --env .env.memos
 ```
 
 常用参数：
@@ -130,14 +149,18 @@ LongMemEval 使用 MIT 许可证；详见
 | `--skip-failed-answer 1` | answer 失败时标记 skipped，而不是失败退出。 |
 | `--skip-failed-judge 1` | judge 失败时标记 skipped，而不是失败退出。 |
 
-LongMemEval 支持按 conversation streaming：
+LongMemEval、BEAM、PersonaMem v2 和 HaluMem 支持 streaming 模式。在
+streaming 模式下，OmniMemEval 会对每个 benchmark unit 依次执行 add、search、
+保存结果和 delete，再进入下一个 unit。对应 runner 均通过 `--streaming 1` 启用：
 
 ```bash
 ./scripts/run_lme_eval.sh --lib memos --env .env.memos --streaming 1
+./scripts/run_beam_eval.sh --lib memos --env .env.memos --streaming 1
+./scripts/run_pmv2_eval.sh --lib memos --env .env.memos --streaming 1
+./scripts/run_halumem_eval.sh --lib memos --env .env.memos --streaming 1
 ```
 
-Streaming 会对每个 conversation 执行 add、search、保存结果、delete，再进入下一个
-conversation。可配合 `--start-idx`、`--end-idx`、`--restart-unit`、
+Streaming 模式可配合 `--start-idx`、`--end-idx`、`--restart-unit`、
 `--no-resume` 和 `--skip-failed-streaming` 使用。
 
 最小 smoke 命令：
@@ -149,6 +172,15 @@ conversation。可配合 `--start-idx`、`--end-idx`、`--restart-unit`、
 # LongMemEval：只跑一个 streaming conversation 到 search
 ./scripts/run_lme_eval.sh --lib memos --env .env.memos --version smoke_lme \
   --streaming 1 --start-idx 0 --end-idx 0 --to-step 2
+
+# BEAM：默认 100K scale，只跑 ingestion 和 search
+./scripts/run_beam_eval.sh --lib memos --env .env.memos --version smoke_beam --to-step 2
+
+# PersonaMem v2：只跑 ingestion 和 search
+./scripts/run_pmv2_eval.sh --lib memos --env .env.memos --version smoke_pmv2 --to-step 2
+
+# HaluMem：只跑 ingestion 和 search
+./scripts/run_halumem_eval.sh --lib memos --env .env.memos --version smoke_hm --to-step 2
 ```
 
 从已有结果目录 replay 后续阶段：
@@ -156,12 +188,15 @@ conversation。可配合 `--start-idx`、`--end-idx`、`--restart-unit`、
 ```bash
 ./scripts/run_locomo_eval.sh --lib memos --env .env.memos --replay results/locomo/{LIB}-{VERSION}/
 ./scripts/run_lme_eval.sh --lib memos --env .env.memos --replay results/lme/{LIB}-{VERSION}/
+./scripts/run_beam_eval.sh --lib memos --env .env.memos --replay results/beam/{LIB}-{VERSION}/
+./scripts/run_pmv2_eval.sh --lib memos --env .env.memos --replay results/pmv2/{LIB}-{VERSION}/
+./scripts/run_halumem_eval.sh --lib memos --env .env.memos --replay results/halumem/{LIB}-{VERSION}/
 ```
 
 ## Benchmark 结果
 
 公开评测结果见 [docs/benchmark-results.md](./docs/benchmark-results.md)。该文档整理了
-LoCoMo 和 LongMemEval 在 OmniMemEval 统一评测配置下复现的分数、context token
+当前公开 benchmark 链路在 OmniMemEval 统一评测配置下复现的分数、context token
 指标、部署说明、公开参考分数和复现命令。
 
 ## 支持的 Memory Backend
@@ -216,35 +251,81 @@ LongMemEval 评估跨 session 长期记忆。OmniMemEval 通过共享 loader 读
 
 结果目录：`results/lme/{LIB}-{VERSION}/`
 
+<a id="beam"></a>
+### BEAM
+
+BEAM 评估 128K、500K、1M 和 10M token 规模下的长期记忆能力，采用
+per-nugget LLM-as-Judge 评分。数据说明见
+[data/beam/README.md](./data/beam/README.md)。
+
+```bash
+./scripts/run_beam_eval.sh --lib memos --env .env.memos
+```
+
+结果目录：`results/beam/{LIB}-{VERSION}/`
+
+<a id="personamem-v2"></a>
+### PersonaMem v2
+
+PersonaMem v2 评估个性化记忆和偏好感知多选问答。数据说明见
+[data/personamem_v2/README.md](./data/personamem_v2/README.md)。
+
+```bash
+./scripts/run_pmv2_eval.sh --lib memos --env .env.memos
+```
+
+结果目录：`results/pmv2/{LIB}-{VERSION}/`
+
+<a id="halumem"></a>
+### HaluMem
+
+HaluMem 评估记忆幻觉、冲突处理、动态更新和记忆边界鲁棒性。数据说明见
+[data/halumem/README.md](./data/halumem/README.md)。
+
+```bash
+./scripts/run_halumem_eval.sh --lib memos --env .env.memos
+```
+
+结果目录：`results/halumem/{LIB}-{VERSION}/`
+
 ## 清理
 
 删除某次评测写入的后端 memory：
 
 ```bash
-./scripts/run_memory_clear.sh --lib memos --env .env.memos --version <name> --datasets locomo,lme --dry-run
-./scripts/run_memory_clear.sh --lib memos --env .env.memos --version <name> --datasets locomo,lme --yes
+./scripts/run_memory_clear.sh --lib memos --env .env.memos --version <name> --datasets locomo,lme,beam,pmv2,hm --dry-run
+./scripts/run_memory_clear.sh --lib memos --env .env.memos --version <name> --datasets locomo,lme,beam,pmv2,hm --yes
 ```
 
-`--dry-run` 只打印目标 id；实际删除必须显式传入 `--yes`。
+`--dry-run` 只打印目标 id；实际删除必须显式传入 `--yes`。清理非默认 BEAM 或 HaluMem 数据时，可配合可重复的 `--beam-scale` 和 `--halumem-variant` 使用。
 
 ## 项目结构
 
 ```text
 OmniMemEval/
 ├── data/
+│   ├── beam/
+│   ├── halumem/
 │   ├── locomo/
-│   └── longmemeval/
+│   ├── longmemeval/
+│   └── personamem_v2/
 ├── docs/
 │   └── benchmark-results.md
 ├── env_examples/
 ├── scripts/
 │   ├── client_factory/
+│   ├── beam/
+│   ├── halumem/
 │   ├── locomo/
 │   ├── longmemeval/
+│   ├── personamem_v2/
 │   ├── tests/
 │   ├── utils/
+│   ├── run_beam_eval.sh
+│   ├── run_halumem_eval.sh
 │   ├── run_locomo_eval.sh
 │   ├── run_lme_eval.sh
+│   ├── run_pmv2_eval.sh
 │   └── run_memory_clear.sh
 ├── README.md
 ├── README_zh.md
@@ -255,8 +336,8 @@ OmniMemEval/
 ## 验证
 
 ```bash
-bash -n scripts/_experiment_utils.sh scripts/run_locomo_eval.sh scripts/run_lme_eval.sh scripts/run_memory_clear.sh
-conda run -n omnimemeval python -m compileall -q scripts
+bash -n scripts/_experiment_utils.sh scripts/run_*_eval.sh scripts/run_memory_clear.sh
+conda run -n omnimemeval python -m compileall -q scripts data
 conda run -n omnimemeval python -m unittest discover -s scripts/tests -p 'test_*.py'
 ```
 
