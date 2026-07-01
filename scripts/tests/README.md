@@ -1,7 +1,8 @@
 # OmniMemEval Tests
 
-The public test suite covers the LoCoMo and LongMemEval pipelines, shared
-utilities, memory adapter configuration, and integration smoke helpers.
+The public test suite covers the LoCoMo, LongMemEval, BEAM, PersonaMem v2,
+and HaluMem pipelines, shared utilities, memory adapter configuration, and
+integration smoke helpers.
 
 ```bash
 conda run -n omnimemeval python -m unittest discover -s scripts/tests -p 'test_*.py'

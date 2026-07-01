@@ -1,4 +1,4 @@
-"""Shared NLP evaluation metrics for LoCoMo and LongMemEval.
+"""Shared NLP evaluation metrics for LLM-as-Judge benchmarks.
 
 Centralises ROUGE, BLEU, METEOR, BERTScore, semantic similarity,
 F1, and the combined ``calculate_nlp_metrics`` so LLM-as-Judge benchmarks

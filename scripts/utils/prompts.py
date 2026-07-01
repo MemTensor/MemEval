@@ -1,4 +1,13 @@
-"""Centralized prompt templates for LoCoMo and LongMemEval."""
+"""Centralized prompt templates for supported benchmarks and memory libraries.
+
+Organized into four sections:
+  1. Shared context templates     – used across benchmarks and libs
+  2. Lib-specific prompts         – tied to a particular memory framework
+  3. Benchmark answer prompts     – per-benchmark QA generation
+  4. Benchmark judge prompts      – per-benchmark LLM-as-judge evaluation
+"""
+
+# ── 1. Shared context templates ──────────────────────────────────────────────
 
 CONTEXT_TEMPLATE = "Conversation memories:\n\n{memories}"
 
@@ -11,6 +20,8 @@ DUAL_SPEAKER_TEMPLATE = """Memories for user {speaker_1}:
     {speaker_2_memories}
 """
 
+
+# ── 2. Lib-specific prompts ─────────────────────────────────────────────────
 
 MEMOS_CUSTOM_INSTRUCTIONS = """
 Generate personal memories that follow these guidelines:
@@ -40,6 +51,10 @@ Generate personal memories that follow these guidelines:
 5. Format each memory as a paragraph with a clear narrative structure that captures the person's experience, challenges, and aspirations
 """
 
+
+# ── 3. Benchmark answer prompts ──────────────────────────────────────────────
+
+# -- LoCoMo --
 
 LOCOMO_ANSWER_PROMPT = """
     You are a knowledgeable and helpful AI assistant.
@@ -74,6 +89,7 @@ LOCOMO_ANSWER_PROMPT = """
    Answer:
    """
 
+# -- LongMemEval --
 
 LME_ANSWER_PROMPT = """
     You are an intelligent memory assistant tasked with retrieving accurate information from conversation memories.
@@ -104,6 +120,93 @@ LME_ANSWER_PROMPT = """
     Answer:
     """
 
+# -- BEAM --
+
+BEAM_ANSWER_PROMPT = """
+You are a knowledgeable and helpful AI assistant with access to memory context about a user.
+
+# CONTEXT:
+The following are relevant memories retrieved from prior conversations with the user.
+
+{context}
+
+# INSTRUCTIONS:
+1. Carefully analyze the provided memory context.
+2. Answer the question as thoroughly and accurately as possible based on the memories.
+3. If the memories contain specific details (dates, names, numbers, preferences), include them in your answer.
+4. If the memories are insufficient to fully answer the question, provide the best answer you can with available information and note any gaps.
+5. Be detailed and comprehensive in your response.
+
+# QUESTION:
+{question}
+
+# ANSWER:
+"""
+
+# -- HaluMem --
+
+HM_ANSWER_PROMPT = """
+You are an intelligent memory assistant tasked with answering questions based on retrieved conversation memories.
+
+# CONTEXT:
+You have access to memories from prior conversations with a user. These memories contain timestamped information that may be relevant to answering the question.
+
+# INSTRUCTIONS:
+1. Carefully analyze all provided memories.
+2. Pay special attention to timestamps and the chronological order of events.
+3. Answer ONLY based on information present in the provided memories.
+4. If the memories contain conflicting information, use the most recent one unless the question specifically asks about an earlier time.
+5. If the memories do not contain sufficient information to answer the question, say so clearly.
+6. Do NOT fabricate or hallucinate any information not present in the memories.
+
+# APPROACH (Think step by step):
+1. Identify which memories are relevant to the question.
+2. Check for any updates or changes over time in the relevant memories.
+3. Formulate a precise, concise answer grounded solely in the evidence from memories.
+4. Double-check that your answer directly addresses the question asked.
+
+{context}
+
+Question: {question}
+
+Answer:
+"""
+
+
+# -- PersonaMem v2 --
+
+PM_ANSWER_PROMPT = """
+    You are a helpful assistant tasked with selecting the best answer to a user question, based solely on summarized conversation memories.
+
+    # CONTEXT:
+    The following are summarized facts and preferences extracted from prior user conversations. Use only these memories to answer the question.
+
+    {context}
+
+    # INSTRUCTIONS:
+    1. Carefully read and reason over the memory summary.
+    2. Evaluate each of the four answer choices (a) through (d).
+    3. Choose the single best-supported answer based on the information in memory.
+    4. Output ONLY the final choice in the format (a), (b), (c), or (d), placed directly after the token <final_answer>.
+
+    # IMPORTANT RULES:
+    - Your final answer **must appear after** the token <final_answer>.
+    - Your final answer **must use parentheses**, like (a) or (b).
+    - Do NOT list multiple choices. Choose only one.
+    - Do NOT include extra text after <final_answer>. Just output the answer.
+
+    # QUESTION:
+    {question}
+
+    # OPTIONS:
+    {options}
+
+    Final Answer:
+    <final_answer>
+"""
+
+
+# ── 4. Benchmark judge prompts ───────────────────────────────────────────────
 
 JUDGE_SYSTEM_PROMPT = (
     "You are an expert grader that determines if answers to questions "
@@ -135,3 +238,87 @@ JUDGE_PROMPT = """
 
     Just return the label CORRECT or WRONG in a json format with the key as "label".
     """
+
+HM_JUDGE_PROMPT = """
+Your task is to label an answer to a question as 'CORRECT' or 'WRONG'. You will be given:
+    (1) a question about a user's personal information, preferences, or experiences,
+    (2) a 'gold' (ground truth) answer,
+    (3) a generated answer
+which you will score as CORRECT/WRONG.
+
+The question tests whether a memory system can accurately recall and reason about user information
+from prior conversations. The gold answer is the factually correct answer based on the conversation history.
+
+Grading guidelines:
+- Be generous: as long as the generated answer conveys the same core meaning as the gold answer, mark it CORRECT.
+- For factual questions (names, dates, numbers, locations), the generated answer must match the gold answer's key facts.
+- For questions about updates or changes, the answer must reflect the LATEST state unless the question asks about a prior state.
+- If the generated answer says "I don't know" or "no information available" but the gold answer exists, mark it WRONG.
+- If the generated answer fabricates information not in the gold answer, mark it WRONG.
+
+Question: {question}
+Gold answer: {golden_answer}
+Generated answer: {response}
+
+First, provide a short (one sentence) explanation of your reasoning, then finish with CORRECT or WRONG.
+Do NOT include both CORRECT and WRONG in your response, or it will break the evaluation script.
+
+Just return the label CORRECT or WRONG in a json format with the key as "label".
+"""
+
+
+BEAM_RUBRIC_ITEM_JUDGE_PROMPT = """\
+You are an expert evaluator tasked with judging whether the LLM's response \
+demonstrates compliance with the specified RUBRIC CRITERION.
+
+## QUESTION:
+{question}
+
+## RUBRIC CRITERION (what to check):
+{rubric_item}
+
+## RESPONSE TO EVALUATE:
+{response}
+
+## SCORING:
+- **1.0** = Fully satisfied: The response clearly and completely addresses \
+this rubric criterion.
+- **0.5** = Partially satisfied: The response addresses this criterion but \
+is incomplete, vague, or only partially correct.
+- **0.0** = Not satisfied: The response does not address this criterion at \
+all, or is incorrect.
+
+## SEMANTIC TOLERANCE:
+Judge by meaning, not exact wording. Accept paraphrases and synonyms that \
+preserve intent. Numbers/currencies/dates may appear in equivalent forms \
+(e.g. "$68,000", "68k"). Treat them as equal when numerically equivalent.
+
+Evaluate the response against ONLY this specific rubric criterion.
+
+Return your evaluation as JSON:
+{{"score": <0.0 or 0.5 or 1.0>, "reason": "<brief explanation>"}}\
+"""
+
+BEAM_EVENT_ORDERING_JUDGE_PROMPT = """\
+You are an expert evaluator. The question asked the user to list events in \
+chronological order. The reference ordering of events is given below as a \
+numbered list. Your task is to determine the order in which these same \
+events appear in the response.
+
+## QUESTION:
+{question}
+
+## REFERENCE ORDERING (correct chronological order):
+{reference_ordering}
+
+## RESPONSE TO EVALUATE:
+{response}
+
+## INSTRUCTIONS:
+For each event in the reference list, determine its position (1-based) in \
+the response. If an event is NOT mentioned in the response at all, assign \
+position -1.
+
+Return a JSON object mapping each event label to its detected position:
+{{"positions": [{{"event": "<event label>", "position": <int or -1>}}, ...]}}\
+"""

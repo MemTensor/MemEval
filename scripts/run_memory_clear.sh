@@ -15,7 +15,9 @@ Usage:
 Options:
   --lib <name>                 Memory product key.
   --version <name>             Evaluation version suffix to delete.
-  --datasets <list|all>        Comma-separated: locomo,lme. Default: all.
+  --datasets <list|all>        Comma-separated: locomo,lme,beam,pmv2,hm. Default: all.
+  --beam-scale <scale>         BEAM scale to clear: 100k, 500k, 1m, or 10m. Repeatable.
+  --halumem-variant <name>     HaluMem variant to clear: medium or long. Default: medium.
   --dry-run                    Print target ids without deleting backend data.
   --yes                        Confirm destructive deletion. Required unless --dry-run is set.
   --env <file>                 Load environment variables from this file.

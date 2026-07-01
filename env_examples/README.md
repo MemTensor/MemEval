@@ -1,8 +1,8 @@
 # Environment Configuration Examples
 
 This directory contains product-specific environment templates for the public
-OmniMemEval adapter layer. The open-source benchmark pipelines are LoCoMo and
-LongMemEval.
+OmniMemEval adapter layer. The open-source benchmark pipelines currently include
+LoCoMo, LongMemEval, BEAM, PersonaMem v2, and HaluMem.
 
 ## Quick Start
 
@@ -16,14 +16,18 @@ Fill in the required fields:
 - `ANSWER_MODEL`, `ANSWER_API_KEY`, `ANSWER_BASE_URL`.
 - `EVAL_MODEL`, `EVAL_API_KEY`, `EVAL_BASE_URL`.
 
-Then run:
+Then run one of the benchmark entrypoints:
 
 ```bash
 ./scripts/run_locomo_eval.sh --lib memos --env .env.memos
 ./scripts/run_lme_eval.sh --lib memos --env .env.memos
+./scripts/run_beam_eval.sh --lib memos --env .env.memos
+./scripts/run_pmv2_eval.sh --lib memos --env .env.memos
+./scripts/run_halumem_eval.sh --lib memos --env .env.memos
 ```
 
-See [PARAMETERS.md](./PARAMETERS.md) for shared runner and LLM settings.
+See [PARAMETERS.md](./PARAMETERS.md) for shared runner, benchmark-specific,
+and LLM settings.
 
 ## Available Templates
 
