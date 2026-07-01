@@ -1,132 +1,46 @@
-# AgentBench 评测结果记录
+# AgentBench Evaluation Results
 
-本文记录 OmniMemEval AgentBench 迁移后的流程验证结果。目的主要是确认五个域的 train/test、记忆生命周期、feedback、structured feedback 和 OpenClaw adapter 行为是否正确，不作为正式排行榜结论。
+[Chinese](./eval_res_zh.md)
 
-## 验证环境
+## Metrics
 
-- 日期：2026-07-01
-- 项目目录：`/root/gyh/OmniMemEval_dev/OmniMemEval`
-- Agent：`openclaw`
-- Agent 配置：`configs/agentbench/agents/openclaw.yaml`
-- 记忆插件：`memos`
-- 记忆插件配置：`configs/agentbench/memory_plugins/memos.yaml`
-- 协议：`memory_train_backup_test`
-- 每域样本：1 条 train + 1 条 test
-- `test_runs`: 1
-- `trials`: 1
-- `parallel`: 1
-- train feedback：启用
-- structured feedback：启用
-- test 前恢复记忆：启用
+> Acc: the average single-run pass rate across 3 independent runs of the same task, used to measure stable task completion in one run.
 
-## 最终验证结果
+> Avg turns: the average number of model response turns triggered by the agent per task, used to measure interaction and reasoning depth.
 
-最终有效结果由两批组成：
+> Avg chars: the average character length of the agent's response text, used to measure output length.
 
-- 四个非 SWE 域：`memos_5domain_toolfix_20260701_192800`
-- SWE 域：`memos_swe_trajectoryfix_20260701_202824`
+## Data And Evaluation Setup
 
-| 域 | 结果目录 | Train pass@1 | Test pass@1 | Train reward | Test reward | Structured feedback | 记忆生命周期 |
-|---|---|---:|---:|---:|---:|---|---|
-| reasoning | `openclaw-memos-memos_5domain_toolfix_20260701_192800-reasoning` | 1.0 | 0.0 | 1.0 | 0.0 | submitted, same_episode=true, turns=2 | clear/backup/restore 全部成功 |
-| information_retrieval | `openclaw-memos-memos_5domain_toolfix_20260701_192800-information_retrieval` | 1.0 | 0.0 | 1.0 | 0.0 | submitted, same_episode=true, turns=2 | clear/backup/restore 全部成功 |
-| knowledge_work | `openclaw-memos-memos_5domain_toolfix_20260701_192800-knowledge_work` | 1.0 | 0.0 | 0.65 | 0.0 | submitted, same_episode=true, turns=2 | clear/backup/restore 全部成功 |
-| code_implementation | `openclaw-memos-memos_5domain_toolfix_20260701_192800-code_implementation` | 1.0 | 1.0 | 1.0 | 1.0 | submitted, same_episode=true, turns=2 | clear/backup/restore 全部成功 |
-| software_engineering | `openclaw-memos-memos_swe_trajectoryfix_20260701_202824-software_engineering` | 0.0 | 1.0 | 0.0 | 1.0 | submitted, same_episode=true, turns=2 | clear/backup/restore 全部成功 |
+Dataset source and split logic:
 
-## 关键检查项
+Reference: [https://huggingface.co/datasets/EverMind-AI/EvoAgentBench](https://huggingface.co/datasets/EverMind-AI/EvoAgentBench)
 
-| 检查项 | 结果 |
-|---|---|
-| 五个域均能完成 train + backup + restore + test | 通过 |
-| train 后 feedback 使用同一个 OpenClaw session id | 通过 |
-| structured feedback 能提交到同一 episode | 通过 |
-| 每个 test run 前恢复对应 domain backup | 通过 |
-| 结果目录落在 `results/agentbench` | 通过 |
-| OpenClaw `toolUse` 中间状态不会被误判为最终回答 | 通过 |
-| OpenClaw session 已写最终回答但 CLI 不退出时能恢复 | 通过 |
-| OpenClaw trajectory 已 error/timeout 但 CLI 不退出时能结束 | 通过 |
+Evaluated agent: OpenClaw with the corresponding product plugin.
 
-## 运行中修复的问题
+Baseline refers to OpenClaw running without any plugin.
 
-### 1. `toolUse` 被误当成最终回答
+The OpenClaw version used for evaluation is 2026.5.7.
 
-早期恢复逻辑只要看到 assistant 有 `stopReason` 就认为本轮已完成。工具型任务中 `stopReason=toolUse` 只是中间状态，导致 IR/KW/code/SWE 被截断在“我要搜索/读文件/写代码”的初始阶段。
+Products not marked as cloud services use locally deployed services and their corresponding OpenClaw plugins.
 
-修复：
+MemOS uses Memos-Local-Plugin version 2.0.8.
 
-- OpenClaw adapter 只把非 `toolUse` 的 assistant stop reason 当作终止型完成信号。
-- feedback 与 train 共用 session 时，只接受本次调用之后新增的终止型 assistant 消息。
+OpenClaw answer model configuration: qwen3.6-flash in no_thinking mode.
 
-修复后效果：
+Evaluation judge model: qwen3.6-flash in thinking mode.
 
-- IR train 从截断失败变为完整检索并通过。
-- KW train 生成 Excel 交付物并通过。
-- code train/test 均通过。
-- SWE train 能产生 patch 并运行 verifier。
+## Results
 
-### 2. trajectory 已结束但 CLI 不退出
+| **Method** | BrowseComp-Plus Acc | BrowseComp-Plus Avg turns | OmniMath <br>Acc | OmniMath Cost <br>Avg chars (unit: k tokens) | SWE-Bench <br>Acc | SWE-Bench <br>Avg turns | LiveCodeBench <br>Acc | LiveCodeBench Avg turns | GDPVal <br>Acc | GDPVal <br>Avg turns |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **Baseline** | 18.46 | 35.1 | 52 | 5658.6 | 26.92 | 58.8 | 51.28 | 23.9 | 34.48 | 17.2 |
+| **Mem0** | 13.33 | 36.4 | 53 | 6090.53 | 26.92 | 55.78 | 60.68 | 6.27 | 41.38 | 17.28 |
+| **EverOS** | 18.98 | 30.8 | 54.67 | 6085.87 | 32.05 | 54.77 | 59.83 | 7.2 | 38.51 | 16.97 |
+| **Supermemory** | 14.36 | 32.03 | 58 | 5632.1 | 30.7 | 51.37 | 59.83 | 6.83 | 43.10 | 16.70 |
+| **Hindsight** | 16.92 | 35.6 | 55 | 6177 | 38.46 | 56.7 | 71.79 | 14.2 | 50.00 | 17.5 |
+| **mem9**<br>**(Cloud service)** | 12.31 | 31.6 | 54.33 | 5880.9 | 30.77 | 59.1 | 64.1 | 8.23 | 47.7 | 15.8 |
+| **Memori**<br>**(Cloud service)** | 16.92 | 36.3 | 52 | 6189.2 | 34.62 | 43.1 | 51.28 | 9.3 | 37.93 | 15.8 |
+| **MemOS** | **23.85*** | 43.3 | **61*** | 5164.2 | **38.46*** | 49.55 | <u>64.96</u> | 9.43 | **62.07*** | 23.93 |
 
-SWE test 曾复现 OpenClaw trajectory 已写入：
-
-```text
-session.ended status=error idleTimedOut=true
-```
-
-但 CLI 进程仍然存活，runner 会继续等到 `agent_timeout`。修复后 adapter 监听 `.trajectory.jsonl`，如果 OpenClaw 已记录 error/timeout，会终止 CLI 并返回 `completion_status=timeout`，避免长时间空等。
-
-注意：该场景下 SWE verifier 仍可使用 agent 已产生的 patch 继续验证，所以最终 test reward 可以为 1.0。
-
-## 单测
-
-修复后相关单测：
-
-```bash
-PYTHONPATH=scripts /root/miniconda3/envs/agentmem/bin/python -m pytest -q \
-  scripts/tests/unit/test_agentbench_openclaw_config.py \
-  scripts/tests/unit/test_agentbench_memos_feedback.py \
-  scripts/tests/unit/test_agentbench_session.py \
-  scripts/tests/unit/test_agentbench_reasoning.py
-```
-
-结果：
-
-```text
-23 passed in 1.90s
-```
-
-## 复现命令
-
-五域运行命令：
-
-```bash
-PYTHON=/root/miniconda3/envs/agentmem/bin/python \
-./scripts/run_agentbench_memory_train_backup_test.sh \
-  --memory-plugin memos \
-  --version memos_5domain_toolfix_20260701_192800 \
-  --test-runs 1 \
-  --trials 1 \
-  --parallel 1
-```
-
-SWE 单域补充验证命令：
-
-```bash
-PYTHON=/root/miniconda3/envs/agentmem/bin/python \
-./scripts/run_agent_eval.sh \
-  --agent openclaw \
-  --domain software_engineering \
-  --protocol memory_train_backup_test \
-  --memory-plugin memos \
-  --version memos_swe_trajectoryfix_20260701_202824 \
-  --test-runs 1 \
-  --trials 1 \
-  --parallel 1 \
-  --max-retries 0
-```
-
-## 说明
-
-- 本结果是每个域各 1 条样本的流程验证，不代表完整 benchmark 平均性能。
-- reasoning、IR、KW 的 test reward 为 0 不代表流程失败，只说明对应单条 test 样本未通过 verifier。
-- 外部 LLM judge 和 embedding 服务的延迟会显著影响 wall time，尤其是 IR judge。
+PS: Results are averaged over three runs. An asterisk (*) marks the best result, and an underlined value marks the second-best result.

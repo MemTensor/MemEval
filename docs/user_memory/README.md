@@ -84,8 +84,10 @@ runs can continue from the last completed step.
 ```bash
 conda create -n omnimemeval python=3.12 -y
 conda activate omnimemeval
-pip install -r requirements.txt
+pip install -r requirements_user_memory.txt
 ```
+
+AgentBench dependencies live in `requirements_agentbench.txt` and should be installed in a separate Agent Memory environment.
 
 ### 2. Configure Credentials
 
@@ -372,7 +374,8 @@ OmniMemEval/
 ├── README.md
 ├── README_zh.md
 ├── THIRD_PARTY_NOTICES.md
-└── requirements.txt
+├── requirements_user_memory.txt  # User Memory dependencies
+└── requirements_agentbench.txt   # AgentBench dependencies
 ```
 
 ## Verification

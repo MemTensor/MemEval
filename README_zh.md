@@ -34,10 +34,19 @@ User Memory Evaluation 和 Agent Memory Evaluation 使用两套独立环境。Us
 ```bash
 conda create -n omnimemeval python=3.12 -y
 conda activate omnimemeval
-pip install -r requirements.txt
+pip install -r requirements_user_memory.txt
 ```
 
-Agent Memory Evaluation 推荐使用独立的 `agentmem` 环境，因为 AgentBench 任务域依赖 OpenClaw 和额外领域依赖。详见 [docs/agent_memory/README_zh.md](./docs/agent_memory/README_zh.md)。
+Agent Memory Evaluation 推荐使用独立的 `agentmem` 环境，因为 AgentBench 任务域依赖 OpenClaw 和额外领域依赖：
+
+```bash
+conda create -n agentmem python=3.12 -y
+conda activate agentmem
+python -m pip install -U pip
+pip install -r requirements_agentbench.txt
+```
+
+OpenClaw、系统包和各 domain 的额外安装步骤详见 [docs/agent_memory/README_zh.md](./docs/agent_memory/README_zh.md)。
 
 不同评测线存在额外依赖：
 
@@ -74,7 +83,7 @@ huggingface-cli download EverMind-AI/EvoAgentBench \
 ## 结果
 
 - User Memory 公开结果快照：[docs/benchmark-results.md](./docs/benchmark-results.md)
-- AgentBench 流程验证结果：[docs/agent_memory/eval_res.md](./docs/agent_memory/eval_res.md)
+- AgentBench 评测结果：[docs/agent_memory/eval_res_zh.md](./docs/agent_memory/eval_res_zh.md)
 
 ## 目录结构
 

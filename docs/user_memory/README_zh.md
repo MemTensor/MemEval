@@ -77,8 +77,10 @@ Shell runner 和 Python 阶段都支持 checkpoint/resume。
 ```bash
 conda create -n omnimemeval python=3.12 -y
 conda activate omnimemeval
-pip install -r requirements.txt
+pip install -r requirements_user_memory.txt
 ```
+
+AgentBench 依赖放在 `requirements_agentbench.txt`，应安装在独立的 Agent Memory 环境中。
 
 ### 2. 配置凭证
 
@@ -324,7 +326,8 @@ OmniMemEval/
 ├── README.md
 ├── README_zh.md
 ├── THIRD_PARTY_NOTICES.md
-└── requirements.txt
+├── requirements_user_memory.txt  # User Memory 依赖
+└── requirements_agentbench.txt   # AgentBench 依赖
 ```
 
 ## 验证

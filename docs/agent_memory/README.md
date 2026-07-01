@@ -39,9 +39,10 @@ Agent Memory Evaluation uses a separate conda environment from the User Memory t
 conda create -n agentmem python=3.12 -y
 conda activate agentmem
 python -m pip install -U pip
-pip install -r requirements.txt
-pip install docker pandas pyarrow swebench datasets openai httpx pyyaml
+pip install -r requirements_agentbench.txt
 ```
+
+Do not reuse the User Memory environment for AgentBench. User Memory and AgentBench dependencies are maintained in separate requirements files.
 
 Install OpenClaw CLI and make sure it is available in `PATH`:
 
@@ -299,4 +300,4 @@ Key files:
 - `result.json.memos_feedback_result`: plugin-side structured feedback status when enabled.
 - `memory_lifecycle.json`: clear/backup/restore lifecycle events.
 
-Recent flow validation results are recorded in [eval_res.md](./eval_res.md). These results validate the pipeline and are not a stable benchmark leaderboard.
+Recent evaluation results are recorded in [eval_res.md](./eval_res.md). Model service, external judge service, and embedding service status may affect per-sample rewards.

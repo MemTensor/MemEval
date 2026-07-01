@@ -1,0 +1,44 @@
+# Agent Memory Evaluation / AgentBench dependencies.
+# Keep this file separate from requirements_user_memory.txt because AgentBench
+# domains pull heavier and domain-specific packages.
+
+# ─── Core runner ──────────────────────────────────────────────────────────────
+python-dotenv
+PyYAML
+openai
+httpx
+numpy
+pandas
+tqdm
+datasets
+huggingface_hub
+
+# ─── BrowseComp-Plus / information_retrieval ────────────────────────────────
+fastmcp
+faiss-cpu
+transformers
+torch
+torchvision
+accelerate
+peft
+pyserini
+pyngrok
+tevatron @ git+https://github.com/texttron/tevatron.git@main
+
+# ─── SWE-Bench / software_engineering ────────────────────────────────────────
+docker
+pyarrow
+swebench
+
+# ─── GDPVal / knowledge_work ─────────────────────────────────────────────────
+openpyxl
+python-docx
+pdf2image
+pillow
+pdfplumber
+PyMuPDF
+
+# ─── LiveCodeBench / code_implementation ─────────────────────────────────────
+# LiveCodeBench itself has conflicting dependencies and should be installed
+# separately as documented in docs/agent_memory/README.md.
+pebble
